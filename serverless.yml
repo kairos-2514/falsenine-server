@@ -1,0 +1,88 @@
+service: falsenine-server
+frameworkVersion: "4"
+
+plugins:
+  - serverless-domain-manager
+
+custom:
+  customDomain:
+    domainName: api.falseninejersey.shop
+    stage: ${self:provider.stage}
+    basePath: ''
+    certificateName: api.falseninejersey.shop # Must match ACM certificate
+    createRoute53Record: false # Set to false since using GoDaddy
+    endpointType: 'regional'
+    apiType: http # REQUIRED: Tells the plugin to use HTTP API v2 instead of REST API
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: ap-south-1
+  stage: prod
+  memorySize: 512
+  timeout: 30
+  httpApi:
+    cors:
+      allowedOrigins:
+        - https://www.falseninejersey.shop
+        - https://falseninejersey.shop
+        - http://localhost:3000
+        - https://falsenine-ggs.vercel.app
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+      allowCredentials: true
+  environment:
+    DYNAMODB_TABLE_NAME: EcommerceData
+    CONTACT_TABLE_NAME: contact
+    RAZORPAY_KEY_ID: ${env:RAZORPAY_KEY_ID}
+    RAZORPAY_KEY_SECRET: ${env:RAZORPAY_KEY_SECRET}
+    COOKIE_DOMAIN: ${env:COOKIE_DOMAIN, '.falseninejersey.shop'}
+    JWT_SECRET: ${env:JWT_SECRET, 'falsenine_super_secret_key'}
+    NODE_ENV: ${env:NODE_ENV, 'production'}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:UpdateItem
+            - dynamodb:DescribeTable
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/EcommerceData
+            - arn:aws:dynamodb:${self:provider.region}:*:table/EcommerceData/index/GSI1
+            - arn:aws:dynamodb:${self:provider.region}:*:table/contact
+
+functions:
+  api:
+    handler: dist/handler.handler
+    events:
+      # CRITICAL FIX: Properly configure all routes
+      - httpApi:
+          path: /
+          method: ANY
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+
+package:
+  patterns:
+    - dist/**
+    - node_modules/**
+    - package.json
+    - package-lock.json
+    - "!src/**"
+    - "!.git/**"
+    - "!**/*.ts"
+
+
